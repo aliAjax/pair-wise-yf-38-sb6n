@@ -83,13 +83,41 @@ def create_handler(service, rules, static_dir):
                     index = os.path.join(static_dir, "index.html")
                     with open(index, "r", encoding="utf-8") as handle:
                         return self._send_html(200, handle.read())
+                # GET /api/audit?dataset_id=...：审计按数据集聚合
                 if parts == ["api", "audit"]:
-                    return self._send(200, {"items": service.audit_log()})
+                    query = parse_qs(parsed.query)
+                    dataset_id = query.get("dataset_id", [None])[0]
+                    entity_id = query.get("entity_id", [None])[0]
+                    return self._send(
+                        200,
+                        {"items": service.audit_log(
+                            entity_id=entity_id, dataset_id=dataset_id
+                        )},
+                    )
+                # GET /api/datasets/<id>/governance：政策版本/受影响对象/失败重试视图
+                if len(parts) == 4 and parts[0] == "api" \
+                        and parts[1] in ("datasets", "dataset") \
+                        and parts[3] == "governance":
+                    return self._send(
+                        200, service.governance_view(parts[2])
+                    )
+                # GET /api/policy-batches/<id>
+                if len(parts) == 3 and parts[:2] == ["api", "policy-batches"]:
+                    return self._send(200, service.get_policy_batch(parts[2]))
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     return self._send(200, service.get(parts[2]))
                 if len(parts) >= 2 and parts[0] == "api":
                     if parts[1] == "entities":
                         raise NotFoundError("not found")
+                    if parts[1] == "policy-batches":
+                        query = parse_qs(parsed.query)
+                        dataset_id = query.get("dataset_id", [None])[0]
+                        status = query.get("status", [None])[0]
+                        return self._send(
+                            200,
+                            {"items": service.list_policy_batches(
+                                dataset_id=dataset_id, status=status)},
+                        )
                     if len(parts) == 3:
                         return self._send(200, service.get(parts[2]))
                     query = parse_qs(parsed.query)
@@ -107,6 +135,26 @@ def create_handler(service, rules, static_dir):
                 parsed = urlparse(self.path)
                 parts = [part for part in parsed.path.split("/") if part]
                 actor = self._actor()
+                # POST /api/datasets/<id>/policy：提交政策变更治理批次
+                if len(parts) == 4 and parts[0] == "api" \
+                        and parts[1] == "datasets" and parts[3] == "policy":
+                    return self._send(
+                        200, service.update_policy(actor, parts[2], self._body())
+                    )
+                # POST /api/datasets/<id>/backfill-policy：旧数据补录政策版本
+                if len(parts) == 4 and parts[0] == "api" \
+                        and parts[1] == "datasets" \
+                        and parts[3] == "backfill-policy":
+                    return self._send(
+                        200,
+                        service.backfill_policy_version(actor, parts[2], self._body()),
+                    )
+                # POST /api/policy-batches/<id>/retry：管理员重试失败批次
+                if len(parts) == 4 and parts[:2] == ["api", "policy-batches"] \
+                        and parts[3] == "retry":
+                    return self._send(
+                        200, service.retry_policy_batch(actor, parts[2])
+                    )
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     body = self._body()
                     action = body.pop("action", None)

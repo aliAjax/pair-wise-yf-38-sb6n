@@ -19,6 +19,10 @@ def main(argv=None):
     repository = SQLiteRepository(args.db)
     rules = RuleEngine()
     service = DomainService(repository, rules)
+    # 重启只续做未完成批次；已处理对象保持 done/skipped，不会重复吊销。
+    resumed = service.resume_on_startup()
+    if resumed:
+        print("resumed %d unfinished policy batch(es)" % len(resumed), flush=True)
     static_dir = Path(__file__).resolve().parent / "static"
     server = create_server(args.host, args.port, service, rules, str(static_dir))
 
