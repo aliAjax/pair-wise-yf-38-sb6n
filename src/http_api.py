@@ -87,6 +87,8 @@ def create_handler(service, rules, static_dir):
                     return self._send(200, {"items": service.audit_log()})
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     return self._send(200, service.get(parts[2]))
+                if len(parts) == 4 and parts[:2] == ["api", "datasets"] and parts[3] == "governance":
+                    return self._send(200, service.dataset_governance(parts[2]))
                 if len(parts) >= 2 and parts[0] == "api":
                     if parts[1] == "entities":
                         raise NotFoundError("not found")
@@ -114,6 +116,17 @@ def create_handler(service, rules, static_dir):
                         raise ValidationError("action is required")
                     data = body.pop("data", body)
                     expected = body.pop("expected_version", None)
+                    if action == "update_policy":
+                        return self._send(
+                            200,
+                            service.update_policy(actor, parts[2], data.get("access_policy")),
+                        )
+                    if action == "deactivate":
+                        return self._send(200, service.deactivate(actor, parts[2]))
+                    if action == "reactivate":
+                        return self._send(200, service.reactivate(actor, parts[2]))
+                    if action == "backfill_policy":
+                        return self._send(200, service.backfill_policy(actor, parts[2]))
                     return self._send(
                         200,
                         service.transition(actor, parts[2], action, data, expected),
@@ -123,15 +136,22 @@ def create_handler(service, rules, static_dir):
                     action = body.pop("action", None)
                     if not action:
                         raise ValidationError("action is required")
+                    data = body.pop("data", body)
+                    expected = body.pop("expected_version", None)
+                    if action == "update_policy":
+                        return self._send(
+                            200,
+                            service.update_policy(actor, parts[2], data.get("access_policy")),
+                        )
+                    if action == "deactivate":
+                        return self._send(200, service.deactivate(actor, parts[2]))
+                    if action == "reactivate":
+                        return self._send(200, service.reactivate(actor, parts[2]))
+                    if action == "backfill_policy":
+                        return self._send(200, service.backfill_policy(actor, parts[2]))
                     return self._send(
                         200,
-                        service.transition(
-                            actor,
-                            parts[2],
-                            action,
-                            body.pop("data", body),
-                            body.pop("expected_version", None),
-                        ),
+                        service.transition(actor, parts[2], action, data, expected),
                     )
                 if len(parts) == 5 and parts[0] == "api" and parts[4] == "actions":
                     return self._send(
